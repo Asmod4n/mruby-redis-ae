@@ -1,6 +1,6 @@
 # mruby-redis-ae
 
-Redis event loop for mruby
+mruby wrapper for the Redis Ae event loop
 
 License
 =======
@@ -20,6 +20,9 @@ limitations under the License.
 
 Acknowledgements
 ================
+
+This is using code from https://github.com/antirez/disque
+
 Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
 All rights reserved.
 
