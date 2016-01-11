@@ -40,7 +40,7 @@ mrb_aeStop(mrb_state *mrb, mrb_value self)
 }
 
 static inline void
-mrb_aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask)
+mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
 {
   mrb_state *mrb = eventLoop->mrb;
   int arena_index = mrb_gc_arena_save(mrb);
@@ -51,6 +51,17 @@ mrb_aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask
   args[1] = mrb_fixnum_value(mask);
   mrb_yield_argv(mrb, callback_data->block, 2, args);
   mrb_gc_arena_restore(mrb, arena_index);
+}
+
+static inline mrb_value
+mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock, mrb_value block, int mask)
+{
+  struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "CallbackData"));
+  mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
+  mrb_ae_callback_data = mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 1, &sock, block);
+  mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask"), mrb_fixnum_value(mask));
+
+  return mrb_ae_callback_data;
 }
 
 static mrb_value
@@ -79,13 +90,10 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
     case MRB_TT_FALSE:
       break;
     default:
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "data type not supported");
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "sock type not supported");
   }
 
-  struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "CallbackData"));
-  mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
-  mrb_ae_callback_data = mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 1, &sock, block);
-  mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask"), mrb_fixnum_value(mask));
+  mrb_value mrb_ae_callback_data = mrb_ae_create_file_callback_data(mrb, self, sock, block, mask);
 
   errno = 0;
   int rc = aeCreateFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask, mrb_aeFileProc, DATA_PTR(mrb_ae_callback_data));
@@ -96,6 +104,20 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
   return mrb_ae_callback_data;
 }
 
+static inline void
+mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data, mrb_value self)
+{
+  mrb_value client_data = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "client_data"));
+  int fd = 0;
+  if (!mrb_undef_p(client_data)) {
+    mrb_value fd_val = mrb_Integer(mrb, client_data);
+    fd = mrb_fixnum(fd_val);
+  }
+  int mask = mrb_fixnum(mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask")));
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "block"));
+  aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask);
+}
+
 static mrb_value
 mrb_aeDeleteFileEvent(mrb_state *mrb, mrb_value self)
 {
@@ -104,15 +126,7 @@ mrb_aeDeleteFileEvent(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &mrb_ae_callback_data);
 
   if (mrb_type(mrb_ae_callback_data) == MRB_TT_DATA && DATA_TYPE(mrb_ae_callback_data) == &mrb_ae_callback_data_type) {
-    mrb_value client_data = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "client_data"));
-    int fd = 0;
-    if (!mrb_undef_p(client_data)) {
-      mrb_value fd_val = mrb_Integer(mrb, client_data);
-      fd = mrb_fixnum(fd_val);
-    }
-    int mask = mrb_fixnum(mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask")));
-    mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "block"));
-    aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask);
+    mrb_ae_delete_file_callback_data(mrb, mrb_ae_callback_data, self);
   }
   else {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae callback data");
@@ -199,7 +213,7 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
 
   ae_callback_data_class = mrb_define_class_under(mrb, ae_class, "CallbackData", mrb->object_class);
   MRB_SET_INSTANCE_TT(ae_callback_data_class, MRB_TT_DATA);
-  mrb_define_method(mrb, ae_callback_data_class, "initialize", mrb_ae_callback_data_init, MRB_ARGS_REQ(2));
+  mrb_define_method(mrb, ae_callback_data_class, "initialize", mrb_ae_callback_data_init, MRB_ARGS_REQ(1)|MRB_ARGS_BLOCK());
 }
 
 void mrb_mruby_redis_ae_gem_final(mrb_state* mrb) {}
