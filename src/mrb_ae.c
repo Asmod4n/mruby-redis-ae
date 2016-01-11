@@ -27,7 +27,6 @@ mrb_aeCreateEventLoop(mrb_state *mrb, mrb_value self)
     mrb_sys_fail(mrb, "aeCreateEventLoop");
   }
 
-
   return self;
 }
 
@@ -114,8 +113,8 @@ mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
     fd = mrb_fixnum(fd_val);
   }
   int mask = mrb_fixnum(mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask")));
-  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
   aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask);
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
 }
 
 static mrb_value

@@ -2,6 +2,20 @@
 
 mruby wrapper for the Redis Ae event loop
 
+Examples
+========
+requires 'mruby-socket'
+```ruby
+ae = RedisAe.new
+socket = TCPServer.new(5001)
+ae.create_file_event(socket) do |socket, mask|
+  client = socket.accept
+  puts client.recv(1024)
+  client.close
+end
+ae.main
+```
+
 License
 =======
 Copyright 2016 Hendrik Beskow
