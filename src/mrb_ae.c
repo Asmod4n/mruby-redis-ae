@@ -54,11 +54,11 @@ mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
 }
 
 static inline mrb_value
-mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock, mrb_value block, int mask)
+mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value client_data, int mask, mrb_value block)
 {
   struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "CallbackData"));
   mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
-  mrb_ae_callback_data = mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 1, &sock, block);
+  mrb_ae_callback_data = mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 1, &client_data, block);
   mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask"), mrb_fixnum_value(mask));
 
   return mrb_ae_callback_data;
@@ -93,7 +93,7 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "sock type not supported");
   }
 
-  mrb_value mrb_ae_callback_data = mrb_ae_create_file_callback_data(mrb, self, sock, block, mask);
+  mrb_value mrb_ae_callback_data = mrb_ae_create_file_callback_data(mrb, self, sock, mask, block);
 
   errno = 0;
   int rc = aeCreateFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask, mrb_aeFileProc, DATA_PTR(mrb_ae_callback_data));
@@ -107,14 +107,14 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
 static inline void
 mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data, mrb_value self)
 {
-  mrb_value client_data = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "client_data"));
+  mrb_value client_data = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@client_data"));
   int fd = 0;
   if (!mrb_undef_p(client_data)) {
     mrb_value fd_val = mrb_Integer(mrb, client_data);
     fd = mrb_fixnum(fd_val);
   }
   int mask = mrb_fixnum(mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "mask")));
-  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "block"));
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
   aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask);
 }
 
