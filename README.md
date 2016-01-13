@@ -13,6 +13,10 @@ ae.create_file_event(socket) do |socket, mask|
   puts client.recv(1024)
   client.close
 end
+ae.create_time_event(500) do
+  puts "timer"
+  500
+end
 ae.main
 ```
 
