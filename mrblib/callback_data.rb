@@ -3,6 +3,6 @@ class RedisAe
     attr_reader :sock, :mask, :block
   end
   class TimeCallbackData
-    attr_reader :id, :finalizer, :block
+    attr_reader :finalizer, :block, :id
   end
 end

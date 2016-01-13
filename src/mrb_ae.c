@@ -20,10 +20,11 @@ mrb_aeCreateEventLoop(mrb_state *mrb, mrb_value self)
   errno = 0;
   aeEventLoop *loop = aeCreateEventLoop(setsize);
   if (loop) {
-    loop->mrb = mrb;
     mrb_data_init(self, loop, &mrb_aeEventLoop_type);
     mrb_value callback_data = mrb_ary_new(mrb);
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "callback_data"), callback_data);
+    loop->mrb = mrb;
+    loop->callback_data = callback_data;
   }
   else {
     mrb_sys_fail(mrb, "aeCreateEventLoop");
@@ -55,15 +56,16 @@ mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
 }
 
 static inline mrb_value
-mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock, int mask, mrb_value block)
+mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock, int fd, int mask, mrb_value block)
 {
   struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "FileCallbackData"));
   mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
-  mrb_value args[2];
+  mrb_value args[3];
   args[0] = sock;
-  args[1] = mrb_fixnum_value(mask);
+  args[1] = mrb_fixnum_value(fd);
+  args[2] = mrb_fixnum_value(mask);
 
-  return mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 2, args, block);
+  return mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 3, args, block);
 }
 
 static mrb_value
@@ -94,7 +96,7 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
     fd = fd_mrb;
   }
 
-  mrb_value mrb_ae_callback_data = mrb_ae_create_file_callback_data(mrb, self, sock, mask, block);
+  mrb_value mrb_ae_callback_data = mrb_ae_create_file_callback_data(mrb, self, sock, fd, mask, block);
 
   errno = 0;
   int rc = aeCreateFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask, mrb_aeFileProc, DATA_PTR(mrb_ae_callback_data));
@@ -111,18 +113,14 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
 static inline void
 mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data, mrb_value self)
 {
-  mrb_value sock = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@sock"));
-  mrb_value mask = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@mask"));
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@sock"));
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@mask"));
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
-  if (!mrb_undef_p(sock)) {
-    mrb_value fd = mrb_Integer(mrb, sock);
-    if (mrb_fixnum_p(mask)) {
-      aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), mrb_fixnum(fd), mrb_fixnum(mask));
-      mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
-      mrb_data_init(mrb_ae_callback_data, NULL, NULL);
-      mrb_funcall(mrb, mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "callback_data")), "delete", 1, mrb_ae_callback_data);
-    }
-  }
+  mrb_ae_file_callback_data *callback_data = (mrb_ae_file_callback_data *) DATA_PTR(mrb_ae_callback_data);
+  aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), callback_data->fd, callback_data->mask);
+  mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
+  mrb_data_init(mrb_ae_callback_data, NULL, NULL);
+  mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
 }
 
 static mrb_value
@@ -216,6 +214,7 @@ mrb_aeCreateTimeEvent(mrb_state *mrb, mrb_value self)
 
   if (id != AE_ERR) {
     mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"), mrb_fixnum_value(id));
+    ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id = id;
     mrb_ary_push(mrb, mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "callback_data")), mrb_ae_callback_data);
   }
   else {
@@ -230,13 +229,11 @@ mrb_ae_delete_time_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
 {
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@finalizer"));
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
-  mrb_value id = mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"));
-  if (mrb_fixnum_p(id)) {
-    aeDeleteTimeEvent((aeEventLoop *) DATA_PTR(self), mrb_fixnum(id));
-    mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
-    mrb_data_init(mrb_ae_callback_data, NULL, NULL);
-    mrb_funcall(mrb, mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "callback_data")), "delete", 1, mrb_ae_callback_data);
-  }
+  mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"));
+  aeDeleteTimeEvent((aeEventLoop *) DATA_PTR(self), ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id);
+  mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
+  mrb_data_init(mrb_ae_callback_data, NULL, NULL);
+  mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
 }
 
 static mrb_value
@@ -365,17 +362,18 @@ static mrb_value
 mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 {
   mrb_value sock;
-  mrb_int mask;
+  mrb_int fd, mask;
   mrb_value block;
 
-  mrb_get_args(mrb, "oi&", &sock, &mask, &block);
+  mrb_get_args(mrb, "oii&", &sock, &fd, &mask, &block);
 
   mrb_ae_file_callback_data *callback_data = (mrb_ae_file_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_file_callback_data));
   mrb_data_init(self, callback_data, &mrb_ae_file_callback_data_type);
   callback_data->sock = sock;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@sock"), sock);
-  callback_data->mask = mask;
+  callback_data->fd = fd;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
+  callback_data->mask = mask;
   callback_data->block = block;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 

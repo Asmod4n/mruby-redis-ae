@@ -26,6 +26,7 @@ static const struct mrb_data_type mrb_aeEventLoop_type = {
 
 typedef struct {
   mrb_value sock;
+  int fd;
   int mask;
   mrb_value block;
 } mrb_ae_file_callback_data;
@@ -37,6 +38,7 @@ static const struct mrb_data_type mrb_ae_file_callback_data_type = {
 typedef struct {
   mrb_value finalizer;
   mrb_value block;
+  long long id;
 } mrb_ae_time_callback_data;
 
 static const struct mrb_data_type mrb_ae_time_callback_data_type = {

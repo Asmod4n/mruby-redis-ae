@@ -98,6 +98,7 @@ typedef struct aeEventLoop {
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
     mrb_state *mrb;
+    mrb_value callback_data;
     mrb_value before_sleep_block;
 } aeEventLoop;
 
