@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <mruby/error.h>
 #include <mruby/array.h>
+#include <string.h>
 
 static void
 mrb_aeDeleteEventLoop(mrb_state *mrb, void *p)
@@ -33,17 +34,13 @@ static const struct mrb_data_type mrb_ae_file_callback_data_type = {
   "$i_mrb_ae_file_callback_data_type", mrb_free
 };
 
-
 typedef struct {
   mrb_value finalizer;
   mrb_value block;
-  long long id;
 } mrb_ae_time_callback_data;
-
 
 static const struct mrb_data_type mrb_ae_time_callback_data_type = {
   "$i_mrb_ae_time_callback_data_type", mrb_free
 };
-
 
 #endif
