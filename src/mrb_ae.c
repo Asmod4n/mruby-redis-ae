@@ -405,6 +405,10 @@ mrb_ae_time_callback_data_init(mrb_state *mrb, mrb_value self)
 void
 mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
 {
+  if (sizeof(mrb_int) < sizeof(int)) {
+    mrb_bug(mrb, "mruby-redis-ae isn't compatible with MRB_INT%S", mrb_fixnum_value(sizeof(mrb_int) * 8));
+  }
+
   struct RClass *ae_class, *ae_file_callback_data_class, *ae_time_callback_data_class;
 
   ae_class = mrb_define_class(mrb, "RedisAe", mrb->object_class);
