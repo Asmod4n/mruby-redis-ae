@@ -46,12 +46,12 @@ mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
 {
   mrb_state *mrb = eventLoop->mrb;
   int arena_index = mrb_gc_arena_save(mrb);
-  mrb_ae_file_callback_data *callback_data = (mrb_ae_file_callback_data *) clientData;
+  mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) clientData;
 
   mrb_value argv[2];
-  argv[0] = callback_data->sock;
+  argv[0] = file_callback_data->sock;
   argv[1] = mrb_fixnum_value(mask);
-  mrb_yield_argv(mrb, callback_data->block, 2, argv);
+  mrb_yield_argv(mrb, file_callback_data->block, 2, argv);
 
   mrb_gc_arena_restore(mrb, arena_index);
 }
@@ -118,8 +118,8 @@ mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@sock"));
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@mask"));
   mrb_iv_remove(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@block"));
-  mrb_ae_file_callback_data *callback_data = (mrb_ae_file_callback_data *) DATA_PTR(mrb_ae_callback_data);
-  aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), callback_data->fd, callback_data->mask);
+  mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) DATA_PTR(mrb_ae_callback_data);
+  aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), file_callback_data->fd, file_callback_data->mask);
   mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
   mrb_data_init(mrb_ae_callback_data, NULL, NULL);
   mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
@@ -128,12 +128,12 @@ mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
 static mrb_value
 mrb_aeDeleteFileEvent(mrb_state *mrb, mrb_value self)
 {
-  mrb_value mrb_ae_callback_data;
+  mrb_value mrb_ae_file_callback_data;
 
-  mrb_get_args(mrb, "o", &mrb_ae_callback_data);
+  mrb_get_args(mrb, "o", &mrb_ae_file_callback_data);
 
-  if (mrb_type(mrb_ae_callback_data) == MRB_TT_DATA && DATA_TYPE(mrb_ae_callback_data) == &mrb_ae_file_callback_data_type) {
-    mrb_ae_delete_file_callback_data(mrb, mrb_ae_callback_data, self);
+  if (mrb_type(mrb_ae_file_callback_data) == MRB_TT_DATA && DATA_TYPE(mrb_ae_file_callback_data) == &mrb_ae_file_callback_data_type) {
+    mrb_ae_delete_file_callback_data(mrb, mrb_ae_file_callback_data, self);
   }
   else {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae File callback data");
@@ -146,10 +146,10 @@ static inline int
 mrb_aeTimeProc(aeEventLoop *eventLoop, long long id, void *clientData)
 {
   mrb_state *mrb = eventLoop->mrb;
-  mrb_ae_time_callback_data *callback_data = (mrb_ae_time_callback_data *) clientData;
+  mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) clientData;
   int arena_index = mrb_gc_arena_save(mrb);
 
-  mrb_value ret = mrb_yield(mrb, callback_data->block, mrb_fixnum_value(id));
+  mrb_value ret = mrb_yield(mrb, time_callback_data->block, mrb_fixnum_value(id));
   ret = mrb_Integer(mrb, ret);
   mrb_int milliseconds = mrb_fixnum(ret);
 
@@ -166,11 +166,11 @@ static inline void
 mrb_aeEventFinalizerProc(aeEventLoop *eventLoop, void *clientData)
 {
   mrb_state *mrb = eventLoop->mrb;
-  mrb_ae_time_callback_data *callback_data = (mrb_ae_time_callback_data *) clientData;
+  mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) clientData;
   int arena_index = mrb_gc_arena_save(mrb);
 
-  mrb_assert (mrb_type(callback_data->finalizer) == MRB_TT_PROC);
-  mrb_yield_argv(mrb, callback_data->finalizer, 0, NULL);
+  mrb_assert (mrb_type(time_callback_data->finalizer) == MRB_TT_PROC);
+  mrb_yield_argv(mrb, time_callback_data->finalizer, 0, NULL);
 
   mrb_gc_arena_restore(mrb, arena_index);
 }
@@ -355,7 +355,13 @@ mrb_aeResizeSetSize(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_RUNTIME_ERROR, "setsize doesn't fit into int");
   }
 
-  return mrb_fixnum_value(aeResizeSetSize((aeEventLoop *) DATA_PTR(self), setsize));
+  errno = 0;
+  int rc = aeResizeSetSize((aeEventLoop *) DATA_PTR(self), setsize);
+  if (rc != AE_OK) {
+    mrb_sys_fail(mrb, "aeResizeSetSize");
+  }
+
+  return self;
 }
 
 static mrb_value
@@ -367,14 +373,14 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "oii&", &sock, &fd, &mask, &block);
 
-  mrb_ae_file_callback_data *callback_data = (mrb_ae_file_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_file_callback_data));
-  mrb_data_init(self, callback_data, &mrb_ae_file_callback_data_type);
-  callback_data->sock = sock;
+  mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_file_callback_data));
+  mrb_data_init(self, file_callback_data, &mrb_ae_file_callback_data_type);
+  file_callback_data->sock = sock;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@sock"), sock);
-  callback_data->fd = fd;
+  file_callback_data->fd = fd;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
-  callback_data->mask = mask;
-  callback_data->block = block;
+  file_callback_data->mask = mask;
+  file_callback_data->block = block;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
 
@@ -389,11 +395,11 @@ mrb_ae_time_callback_data_init(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "|o&", &finalizer, &block);
 
-  mrb_ae_time_callback_data *callback_data = (mrb_ae_time_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_time_callback_data));
-  mrb_data_init(self, callback_data, &mrb_ae_time_callback_data_type);
-  callback_data->finalizer = finalizer;
+  mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_time_callback_data));
+  mrb_data_init(self, time_callback_data, &mrb_ae_time_callback_data_type);
+  time_callback_data->finalizer = finalizer;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@finalizer"), finalizer);
-  callback_data->block = block;
+  time_callback_data->block = block;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
 
