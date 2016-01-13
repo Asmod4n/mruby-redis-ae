@@ -52,6 +52,7 @@ mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
   argv[0] = callback_data->sock;
   argv[1] = mrb_fixnum_value(mask);
   mrb_yield_argv(mrb, callback_data->block, 2, argv);
+
   mrb_gc_arena_restore(mrb, arena_index);
 }
 
@@ -60,6 +61,7 @@ mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock,
 {
   struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "FileCallbackData"));
   mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
+
   mrb_value args[3];
   args[0] = sock;
   args[1] = mrb_fixnum_value(fd);
@@ -134,7 +136,7 @@ mrb_aeDeleteFileEvent(mrb_state *mrb, mrb_value self)
     mrb_ae_delete_file_callback_data(mrb, mrb_ae_callback_data, self);
   }
   else {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae callback data");
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae File callback data");
   }
 
   return mrb_nil_value();
@@ -181,6 +183,14 @@ mrb_ae_create_time_callback_data(mrb_state *mrb, mrb_value self, mrb_value final
   return mrb_funcall_with_block(mrb, mrb_obj_value((struct RObject*)callback_data_obj), mrb_intern_lit(mrb, "initialize"), 1, &finalizer, block);
 }
 
+static inline void
+mrb_ae_push_time_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data, long long id, mrb_value self)
+{
+  mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"), mrb_fixnum_value(id));
+  ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id = id;
+  mrb_ary_push(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, mrb_ae_callback_data);
+}
+
 static mrb_value
 mrb_aeCreateTimeEvent(mrb_state *mrb, mrb_value self)
 {
@@ -213,9 +223,7 @@ mrb_aeCreateTimeEvent(mrb_state *mrb, mrb_value self)
   }
 
   if (id != AE_ERR) {
-    mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"), mrb_fixnum_value(id));
-    ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id = id;
-    mrb_ary_push(mrb, mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "callback_data")), mrb_ae_callback_data);
+    mrb_ae_push_time_callback_data(mrb, mrb_ae_callback_data, id, self);
   }
   else {
     mrb_sys_fail(mrb, "aeCreateTimeEvent");
@@ -247,7 +255,7 @@ mrb_aeDeleteTimeEvent(mrb_state *mrb, mrb_value self)
     mrb_ae_delete_time_callback_data(mrb, mrb_ae_callback_data, self);
   }
   else {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae callback data");
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae Time callback data");
   }
 
   return mrb_nil_value();
@@ -270,7 +278,7 @@ mrb_aeProcessEvents(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_aeWait(mrb_state *mrb, mrb_value self)
 {
-  mrb_int fd = 0, mask = AE_READABLE, milliseconds = 0;
+  mrb_int fd = 0, mask = AE_READABLE, milliseconds = -1;
 
   mrb_get_args(mrb, "|iii", &fd, &mask, &milliseconds);
 
@@ -295,14 +303,6 @@ mrb_aeMain(mrb_state *mrb, mrb_value self)
   aeMain((aeEventLoop *) DATA_PTR(self));
 
   return mrb_nil_value();
-}
-
-static mrb_value
-mrb_aeGetApiName(mrb_state *mrb, mrb_value self)
-{
-  const char *api_name = aeGetApiName();
-
-  return mrb_str_new_static(mrb, api_name, strlen(api_name));
 }
 
 static inline void
@@ -407,6 +407,9 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
     mrb_bug(mrb, "mruby-redis-ae isn't compatible with MRB_INT%S", mrb_fixnum_value(sizeof(mrb_int) * 8));
   }
 
+  const char *api_name = aeGetApiName();
+  mrb_value api_name_str = mrb_str_new_static(mrb, api_name, strlen(api_name));
+
   struct RClass *ae_class, *ae_file_callback_data_class, *ae_time_callback_data_class;
 
   ae_class = mrb_define_class(mrb, "RedisAe", mrb->object_class);
@@ -421,6 +424,7 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
   mrb_define_const(mrb, ae_class, "ALL_EVENTS", mrb_fixnum_value(AE_ALL_EVENTS));
   mrb_define_const(mrb, ae_class, "DONT_WAIT", mrb_fixnum_value(AE_DONT_WAIT));
   mrb_define_const(mrb, ae_class, "NOMORE", mrb_fixnum_value(AE_NOMORE));
+  mrb_define_const(mrb, ae_class, "API_NAME", api_name_str);
   mrb_define_method(mrb, ae_class, "initialize", mrb_aeCreateEventLoop, MRB_ARGS_NONE());
   mrb_define_method(mrb, ae_class, "stop", mrb_aeStop, MRB_ARGS_NONE());
   mrb_define_method(mrb, ae_class, "create_file_event", mrb_aeCreateFileEvent, MRB_ARGS_OPT(2)|MRB_ARGS_BLOCK());
@@ -430,7 +434,6 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, ae_class, "process_events", mrb_aeProcessEvents, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, ae_class, "wait", mrb_aeWait, MRB_ARGS_OPT(3));
   mrb_define_method(mrb, ae_class, "main", mrb_aeMain, MRB_ARGS_NONE());
-  mrb_define_method(mrb, ae_class, "api_name", mrb_aeGetApiName, MRB_ARGS_NONE());
   mrb_define_method(mrb, ae_class, "before_sleep", mrb_aeSetBeforeSleepProc, MRB_ARGS_BLOCK());
   mrb_define_method(mrb, ae_class, "set_size", mrb_aeGetSetSize, MRB_ARGS_NONE());
   mrb_define_method(mrb, ae_class, "set_size=", mrb_aeResizeSetSize, MRB_ARGS_REQ(1));
