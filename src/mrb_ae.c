@@ -199,7 +199,7 @@ mrb_aeCreateTimeEvent(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "i|o&", &milliseconds, &finalizer, &block);
 
-  if (milliseconds < LONG_LONG_MIN||milliseconds > LONG_LONG_MAX) {
+  if (milliseconds < LLONG_MIN||milliseconds > LLONG_MAX) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "milliseconds doesn't fit into long long");
   }
 
@@ -290,7 +290,7 @@ mrb_aeWait(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_ARGUMENT_ERROR, "mask doesn't fit into int");
   }
 
-  if (milliseconds < LONG_LONG_MIN||milliseconds > LONG_LONG_MAX) {
+  if (milliseconds < LLONG_MIN||milliseconds > LLONG_MAX) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "milliseconds doesn't fit into long long");
   }
 
