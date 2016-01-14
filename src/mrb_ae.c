@@ -383,7 +383,6 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
   file_callback_data->block = block;
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
-
   return self;
 }
 
@@ -446,7 +445,7 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
 
   ae_file_callback_data_class = mrb_define_class_under(mrb, ae_class, "FileCallbackData", mrb->object_class);
   MRB_SET_INSTANCE_TT(ae_file_callback_data_class, MRB_TT_DATA);
-  mrb_define_method(mrb, ae_file_callback_data_class, "initialize", mrb_ae_file_callback_data_init, MRB_ARGS_REQ(2)|MRB_ARGS_BLOCK());
+  mrb_define_method(mrb, ae_file_callback_data_class, "initialize", mrb_ae_file_callback_data_init, MRB_ARGS_REQ(3)|MRB_ARGS_BLOCK());
 
   ae_time_callback_data_class = mrb_define_class_under(mrb, ae_class, "TimeCallbackData", mrb->object_class);
   MRB_SET_INSTANCE_TT(ae_time_callback_data_class, MRB_TT_DATA);
