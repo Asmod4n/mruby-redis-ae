@@ -373,15 +373,16 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "oii&", &sock, &fd, &mask, &block);
 
+  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@sock"), sock);
+  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
+  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
+
   mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_file_callback_data));
   mrb_data_init(self, file_callback_data, &mrb_ae_file_callback_data_type);
   file_callback_data->sock = sock;
-  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@sock"), sock);
   file_callback_data->fd = fd;
-  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
   file_callback_data->mask = mask;
   file_callback_data->block = block;
-  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
   return self;
 }
@@ -394,13 +395,13 @@ mrb_ae_time_callback_data_init(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "|o&", &finalizer, &block);
 
+  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@finalizer"), finalizer);
+  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
+
   mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_time_callback_data));
   mrb_data_init(self, time_callback_data, &mrb_ae_time_callback_data_type);
   time_callback_data->finalizer = finalizer;
-  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@finalizer"), finalizer);
   time_callback_data->block = block;
-  mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
-
 
   return self;
 }
