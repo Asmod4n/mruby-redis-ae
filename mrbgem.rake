@@ -5,7 +5,7 @@ MRuby::Gem::Specification.new('mruby-redis-ae') do |spec|
   spec.add_dependency 'mruby-errno'
 
   if build.toolchains.include?('android')
-    spec.cc.flags << '-DHAVE_PTHREADS'
+    spec.cc.defines << 'HAVE_PTHREADS'
   else
     spec.linker.libraries << 'pthread'
   end

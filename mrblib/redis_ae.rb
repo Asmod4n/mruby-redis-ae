@@ -6,4 +6,8 @@ class RedisAe
     end
     ret
   end
+
+  def run_nowait
+    process_events(ALL_EVENTS|DONT_WAIT)
+  end
 end
