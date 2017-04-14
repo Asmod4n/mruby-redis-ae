@@ -355,7 +355,7 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
-  mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_file_callback_data));
+  mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) mrb_realloc(mrb, DATA_PTR(self), sizeof(mrb_ae_file_callback_data));
   mrb_data_init(self, file_callback_data, &mrb_ae_file_callback_data_type);
   file_callback_data->sock = sock;
   file_callback_data->fd = fd;
