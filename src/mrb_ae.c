@@ -391,7 +391,7 @@ mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
     mrb_bug(mrb, "mruby-redis-ae isn't compatible with MRB_INT%S", mrb_fixnum_value(sizeof(mrb_int) * 8));
   }
 
-  static const char *api_name = aeGetApiName();
+  const char *api_name = aeGetApiName();
   mrb_value api_name_str = mrb_str_new_static(mrb, api_name, strlen(api_name));
 
   struct RClass *ae_class, *ae_file_callback_data_class, *ae_time_callback_data_class;
