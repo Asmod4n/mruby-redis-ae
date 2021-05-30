@@ -88,7 +88,7 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
   int fd = 0;
 
   if (!mrb_nil_p(sock)) {
-    mrb_int fd_mrb = mrb_fixnum(mrb_Integer(mrb, sock));
+    mrb_int fd_mrb = mrb_fixnum(mrb_convert_to_integer(mrb, sock, 0));
     if (fd_mrb < INT_MIN||fd_mrb > INT_MAX) {
       mrb_raise(mrb, E_ARGUMENT_ERROR, "fd doesn't fit into int");
     }
@@ -148,7 +148,7 @@ mrb_aeTimeProc(aeEventLoop *eventLoop, long long id, void *clientData)
   mrb_assert(mrb_type(time_callback_data->block) == MRB_TT_PROC);
   mrb_value ret = mrb_yield(mrb, time_callback_data->block, mrb_fixnum_value(id));
   mrb_gc_arena_restore(mrb, ai);
-  mrb_int milliseconds = mrb_fixnum(mrb_Integer(mrb, ret));
+  mrb_int milliseconds = mrb_fixnum(mrb_convert_to_integer(mrb, ret, 0));
 
   if (milliseconds < INT_MIN||milliseconds > INT_MAX) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "milliseconds doesn't fit into int");
