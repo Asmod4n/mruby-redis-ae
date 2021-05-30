@@ -49,7 +49,9 @@ mrb_aeFileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask)
   argv[0] = file_callback_data->sock;
   argv[1] = mrb_fixnum_value(mask);
   mrb_assert(mrb_type(file_callback_data->block) == MRB_TT_PROC);
+  int ai = mrb_gc_arena_save(eventLoop->mrb);
   mrb_yield_argv(eventLoop->mrb, file_callback_data->block, 2, argv);
+  mrb_gc_arena_restore(eventLoop->mrb, ai);
 }
 
 MRB_INLINE mrb_value
@@ -116,7 +118,9 @@ mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
   aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), file_callback_data->fd, file_callback_data->mask);
   mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
   mrb_data_init(mrb_ae_callback_data, NULL, NULL);
+  int ai = mrb_gc_arena_save(mrb);
   mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
+  mrb_gc_arena_restore(mrb, ai);
 }
 
 static mrb_value
@@ -140,9 +144,10 @@ mrb_aeTimeProc(aeEventLoop *eventLoop, long long id, void *clientData)
 {
   mrb_state *mrb = eventLoop->mrb;
   mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) clientData;
-
+  int ai = mrb_gc_arena_save(mrb);
   mrb_assert(mrb_type(time_callback_data->block) == MRB_TT_PROC);
   mrb_value ret = mrb_yield(mrb, time_callback_data->block, mrb_fixnum_value(id));
+  mrb_gc_arena_restore(mrb, ai);
   mrb_int milliseconds = mrb_fixnum(mrb_Integer(mrb, ret));
 
   if (milliseconds < INT_MIN||milliseconds > INT_MAX) {
@@ -158,7 +163,9 @@ mrb_aeEventFinalizerProc(aeEventLoop *eventLoop, void *clientData)
   mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) clientData;
 
   mrb_assert (mrb_type(time_callback_data->finalizer) == MRB_TT_PROC);
+  int ai = mrb_gc_arena_save(eventLoop->mrb);
   mrb_yield_argv(eventLoop->mrb, time_callback_data->finalizer, 0, NULL);
+  mrb_gc_arena_restore(eventLoop->mrb, ai);
 }
 
 MRB_INLINE mrb_value
@@ -224,7 +231,9 @@ mrb_ae_delete_time_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
   aeDeleteTimeEvent((aeEventLoop *) DATA_PTR(self), ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id);
   mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
   mrb_data_init(mrb_ae_callback_data, NULL, NULL);
+  int ai = mrb_gc_arena_save(mrb);
   mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
+  mrb_gc_arena_restore(mrb, ai);
 }
 
 static mrb_value
@@ -291,7 +300,9 @@ MRB_INLINE void
 mrb_aeBeforeSleepProc(aeEventLoop *eventLoop)
 {
   mrb_assert(mrb_type(eventLoop->before_sleep_block) == MRB_TT_PROC);
+  int ai = mrb_gc_arena_save(eventLoop->mrb);
   mrb_yield_argv(eventLoop->mrb, eventLoop->before_sleep_block, 0, NULL);
+  mrb_gc_arena_restore(eventLoop->mrb, ai);
 }
 
 static mrb_value
@@ -376,7 +387,7 @@ mrb_ae_time_callback_data_init(mrb_state *mrb, mrb_value self)
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@finalizer"), finalizer);
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
-  mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) mrb_malloc(mrb, sizeof(mrb_ae_time_callback_data));
+  mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) mrb_realloc(mrb, DATA_PTR(self), sizeof(mrb_ae_time_callback_data));
   mrb_data_init(self, time_callback_data, &mrb_ae_time_callback_data_type);
   time_callback_data->finalizer = finalizer;
   time_callback_data->block = block;
