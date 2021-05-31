@@ -8,14 +8,16 @@ requires 'mruby-socket'
 ```ruby
 ae = RedisAe.new
 socket = TCPServer.new(5001)
-ae.create_file_event(socket) do |socket, mask|
+file_event = ae.create_file_event(socket) do |socket, mask|
   client = socket.accept
   puts client.recv(1024)
   client.close
+  ae.delete_file_event(file_event)
+  ae.stop
 end
-ae.create_time_event(500) do
+time_event = ae.create_time_event(5000) do
   puts "timer"
-  500
+  ae.delete_time_event(time_event)
 end
 ae.main
 ```

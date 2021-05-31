@@ -249,7 +249,7 @@ mrb_aeDeleteTimeEvent(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_ARGUMENT_ERROR, "expected Ae Time callback data");
   }
 
-  return mrb_nil_value();
+  return mrb_fixnum_value(-1);
 }
 
 static mrb_value

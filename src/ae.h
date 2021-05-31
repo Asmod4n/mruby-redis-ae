@@ -13,7 +13,7 @@
  *   * Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Disque nor the names of its contributors may be used
+ *   * Neither the name of Redis nor the names of its contributors may be used
  *     to endorse or promote products derived from this software without
  *     specific prior written permission.
  *
@@ -33,21 +33,30 @@
 #ifndef __AE_H__
 #define __AE_H__
 
+#include "monotonic.h"
 #include <mruby.h>
 
 #define AE_OK 0
 #define AE_ERR -1
 
-#define AE_NONE 0
-#define AE_READABLE 1
-#define AE_WRITABLE 2
+#define AE_NONE 0       /* No events registered. */
+#define AE_READABLE 1   /* Fire when descriptor is readable. */
+#define AE_WRITABLE 2   /* Fire when descriptor is writable. */
+#define AE_BARRIER 4    /* With WRITABLE, never fire the event if the
+                           READABLE event already fired in the same event
+                           loop iteration. Useful when you want to persist
+                           things to disk before sending replies, and want
+                           to do that in a group fashion. */
 
-#define AE_FILE_EVENTS 1
-#define AE_TIME_EVENTS 2
+#define AE_FILE_EVENTS (1<<0)
+#define AE_TIME_EVENTS (1<<1)
 #define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)
-#define AE_DONT_WAIT 4
+#define AE_DONT_WAIT (1<<2)
+#define AE_CALL_BEFORE_SLEEP (1<<3)
+#define AE_CALL_AFTER_SLEEP (1<<4)
 
 #define AE_NOMORE -1
+#define AE_DELETED_EVENT_ID -1
 
 /* Macros */
 #define AE_NOTUSED(V) ((void) V)
@@ -62,7 +71,7 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
 /* File event structure */
 typedef struct aeFileEvent {
-    int mask; /* one of AE_(READABLE|WRITABLE) */
+    int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
     aeFileProc *rfileProc;
     aeFileProc *wfileProc;
     void *clientData;
@@ -71,12 +80,14 @@ typedef struct aeFileEvent {
 /* Time event structure */
 typedef struct aeTimeEvent {
     long long id; /* time event identifier. */
-    long when_sec; /* seconds */
-    long when_ms; /* milliseconds */
+    monotime when;
     aeTimeProc *timeProc;
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
+    struct aeTimeEvent *prev;
     struct aeTimeEvent *next;
+    int refcount; /* refcount to prevent timer events from being
+  		   * freed in recursive time event calls. */
 } aeTimeEvent;
 
 /* A fired event */
@@ -90,13 +101,14 @@ typedef struct aeEventLoop {
     int maxfd;   /* highest file descriptor currently registered */
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
     aeFileEvent *events; /* Registered events */
     aeFiredEvent *fired; /* Fired events */
     aeTimeEvent *timeEventHead;
     int stop;
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
+    aeBeforeSleepProc *aftersleep;
+    int flags;
     mrb_state *mrb;
     mrb_value callback_data;
     mrb_value before_sleep_block;
@@ -119,7 +131,9 @@ int aeWait(int fd, int mask, long long milliseconds);
 void aeMain(aeEventLoop *eventLoop);
 char *aeGetApiName(void);
 void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
+void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep);
 int aeGetSetSize(aeEventLoop *eventLoop);
 int aeResizeSetSize(aeEventLoop *eventLoop, int setsize);
+void aeSetDontWait(aeEventLoop *eventLoop, int noWait);
 
 #endif

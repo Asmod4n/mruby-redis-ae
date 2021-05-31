@@ -11,7 +11,7 @@
  *   * Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Disque nor the names of its contributors may be used
+ *   * Neither the name of Redis nor the names of its contributors may be used
  *     to endorse or promote products derived from this software without
  *     specific prior written permission.
  *
@@ -29,6 +29,7 @@
  */
 
 
+#include <sys/select.h>
 #include <string.h>
 
 typedef struct aeApiState {
@@ -96,7 +97,10 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             eventLoop->fired[numevents].mask = mask;
             numevents++;
         }
+    } else if (retval == -1 && errno != EINTR) {
+        panic("aeApiPoll: select, %s", strerror(errno));
     }
+
     return numevents;
 }
 

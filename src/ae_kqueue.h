@@ -11,7 +11,7 @@
  *   * Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Disque nor the names of its contributors may be used
+ *   * Neither the name of Redis nor the names of its contributors may be used
  *     to endorse or promote products derived from this software without
  *     specific prior written permission.
  *
@@ -53,6 +53,7 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
         zfree(state);
         return -1;
     }
+    anetCloexec(state->kqfd);
     eventLoop->apidata = state;
     return 0;
 }
@@ -129,7 +130,10 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             eventLoop->fired[j].fd = e->ident;
             eventLoop->fired[j].mask = mask;
         }
+    } else if (retval == -1 && errno != EINTR) {
+        panic("aeApiPoll: kevent, %s", strerror(errno));
     }
+
     return numevents;
 }
 
