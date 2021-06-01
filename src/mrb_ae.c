@@ -3,15 +3,9 @@
 static mrb_value
 mrb_aeCreateEventLoop(mrb_state *mrb, mrb_value self)
 {
-  mrb_int setsize;
+  mrb_int setsize = 1024;
 
   int argc = mrb_get_args(mrb, "|i", &setsize);
-  if (argc == 0) {
-    struct rlimit limit;
-    int rc = getrlimit(RLIMIT_NOFILE, &limit);
-    assert (rc == 0);
-    setsize = limit.rlim_cur;
-  }
 
   if (setsize < INT_MIN||setsize > INT_MAX) {
     mrb_raise(mrb, E_RUNTIME_ERROR, "setsize doesn't fit into int");
@@ -21,10 +15,7 @@ mrb_aeCreateEventLoop(mrb_state *mrb, mrb_value self)
   aeEventLoop *loop = aeCreateEventLoop(setsize);
   if (loop) {
     mrb_data_init(self, loop, &mrb_aeEventLoop_type);
-    mrb_value callback_data = mrb_ary_new(mrb);
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "callback_data"), callback_data);
     loop->mrb = mrb;
-    loop->callback_data = callback_data;
   } else {
     mrb_sys_fail(mrb, "aeCreateEventLoop");
   }
@@ -60,12 +51,9 @@ mrb_ae_create_file_callback_data(mrb_state *mrb, mrb_value self, mrb_value sock,
   struct RBasic *callback_data_obj = mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "FileCallbackData"));
   mrb_value mrb_ae_callback_data = mrb_obj_value((struct RObject*)callback_data_obj);
 
-  mrb_value args[3];
-  args[0] = sock;
-  args[1] = mrb_fixnum_value(fd);
-  args[2] = mrb_fixnum_value(mask);
+  mrb_value args[] = { self, sock, mrb_fixnum_value(fd), mrb_fixnum_value(mask) };
 
-  return mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 3, args, block);
+  return mrb_funcall_with_block(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "initialize"), 4, args, block);
 }
 
 static mrb_value
@@ -99,9 +87,7 @@ mrb_aeCreateFileEvent(mrb_state *mrb, mrb_value self)
 
   errno = 0;
   int rc = aeCreateFileEvent((aeEventLoop *) DATA_PTR(self), fd, mask, mrb_aeFileProc, DATA_PTR(mrb_ae_callback_data));
-  if (rc == AE_OK) {
-    mrb_ary_push(mrb, mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "callback_data")), mrb_ae_callback_data);
-  } else {
+  if (rc != AE_OK) {
     mrb_sys_fail(mrb, "aeCreateFileEvent");
   }
 
@@ -118,9 +104,6 @@ mrb_ae_delete_file_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
   aeDeleteFileEvent((aeEventLoop *) DATA_PTR(self), file_callback_data->fd, file_callback_data->mask);
   mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
   mrb_data_init(mrb_ae_callback_data, NULL, NULL);
-  int ai = mrb_gc_arena_save(mrb);
-  mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
-  mrb_gc_arena_restore(mrb, ai);
 }
 
 static mrb_value
@@ -171,7 +154,8 @@ mrb_aeEventFinalizerProc(aeEventLoop *eventLoop, void *clientData)
 MRB_INLINE mrb_value
 mrb_ae_create_time_callback_data(mrb_state *mrb, mrb_value self, mrb_value finalizer, mrb_value block)
 {
-  return mrb_funcall_with_block(mrb, mrb_obj_value((struct RObject*)mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "TimeCallbackData"))), mrb_intern_lit(mrb, "initialize"), 1, &finalizer, block);
+  mrb_value args[] = { self, finalizer };
+  return mrb_funcall_with_block(mrb, mrb_obj_value((struct RObject*)mrb_obj_alloc(mrb, MRB_TT_DATA, mrb_class_get_under(mrb, mrb_class(mrb, self), "TimeCallbackData"))), mrb_intern_lit(mrb, "initialize"), 2, args, block);
 }
 
 MRB_INLINE void
@@ -179,7 +163,6 @@ mrb_ae_push_time_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data, l
 {
   mrb_iv_set(mrb, mrb_ae_callback_data, mrb_intern_lit(mrb, "@id"), mrb_fixnum_value(id));
   ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id = id;
-  mrb_ary_push(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, mrb_ae_callback_data);
 }
 
 static mrb_value
@@ -231,9 +214,6 @@ mrb_ae_delete_time_callback_data(mrb_state *mrb, mrb_value mrb_ae_callback_data,
   aeDeleteTimeEvent((aeEventLoop *) DATA_PTR(self), ((mrb_ae_time_callback_data *) DATA_PTR(mrb_ae_callback_data))->id);
   mrb_free(mrb, DATA_PTR(mrb_ae_callback_data));
   mrb_data_init(mrb_ae_callback_data, NULL, NULL);
-  int ai = mrb_gc_arena_save(mrb);
-  mrb_funcall(mrb, ((aeEventLoop *) DATA_PTR(self))->callback_data, "delete", 1, mrb_ae_callback_data);
-  mrb_gc_arena_restore(mrb, ai);
 }
 
 static mrb_value
@@ -356,11 +336,12 @@ mrb_aeResizeSetSize(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 {
+  aeEventLoop *loop;
   mrb_value sock;
   mrb_int fd, mask;
   mrb_value block = mrb_nil_value();
 
-  mrb_get_args(mrb, "oii&", &sock, &fd, &mask, &block);
+  mrb_get_args(mrb, "doii&", &loop, &mrb_aeEventLoop_type, &sock, &fd, &mask, &block);
 
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@sock"), sock);
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@mask"), mrb_fixnum_value(mask));
@@ -368,6 +349,7 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 
   mrb_ae_file_callback_data *file_callback_data = (mrb_ae_file_callback_data *) mrb_realloc(mrb, DATA_PTR(self), sizeof(mrb_ae_file_callback_data));
   mrb_data_init(self, file_callback_data, &mrb_ae_file_callback_data_type);
+  file_callback_data->loop = loop;
   file_callback_data->sock = sock;
   file_callback_data->fd = fd;
   file_callback_data->mask = mask;
@@ -379,16 +361,18 @@ mrb_ae_file_callback_data_init(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_ae_time_callback_data_init(mrb_state *mrb, mrb_value self)
 {
+  aeEventLoop *loop;
   mrb_value finalizer = mrb_nil_value();
   mrb_value block = mrb_nil_value();
 
-  mrb_get_args(mrb, "|o&", &finalizer, &block);
+  mrb_get_args(mrb, "d|o&", &loop, &mrb_aeEventLoop_type, &finalizer, &block);
 
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@finalizer"), finalizer);
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@block"), block);
 
   mrb_ae_time_callback_data *time_callback_data = (mrb_ae_time_callback_data *) mrb_realloc(mrb, DATA_PTR(self), sizeof(mrb_ae_time_callback_data));
   mrb_data_init(self, time_callback_data, &mrb_ae_time_callback_data_type);
+  time_callback_data->loop = loop;
   time_callback_data->finalizer = finalizer;
   time_callback_data->block = block;
 

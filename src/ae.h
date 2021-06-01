@@ -110,7 +110,6 @@ typedef struct aeEventLoop {
     aeBeforeSleepProc *aftersleep;
     int flags;
     mrb_state *mrb;
-    mrb_value callback_data;
     mrb_value before_sleep_block;
 } aeEventLoop;
 
