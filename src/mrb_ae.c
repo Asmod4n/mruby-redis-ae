@@ -376,7 +376,7 @@ void
 mrb_mruby_redis_ae_gem_init(mrb_state* mrb)
 {
   if (sizeof(mrb_int) < sizeof(int)) {
-    mrb_bug(mrb, "mruby-redis-ae isn't compatible with MRB_INT%S", mrb_int_value(mrb, sizeof(mrb_int) * 8));
+    mrb_raisef(mrb, E_RUNTIME_ERROR, "mruby-redis-ae isn't compatible with MRB_INT%S", mrb_int_value(mrb, sizeof(mrb_int) * 8));
   }
 
   const char *api_name = aeGetApiName();
