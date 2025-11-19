@@ -1,3 +1,5 @@
+This is no longer maintained.
+
 # mruby-redis-ae
 
 mruby wrapper for the Redis Ae event loop
